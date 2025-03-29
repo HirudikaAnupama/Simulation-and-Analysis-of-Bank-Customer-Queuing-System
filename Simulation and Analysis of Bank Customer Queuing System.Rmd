@@ -1,0 +1,38 @@
+---
+title: "Simulation and Analysis of Customer Queuing System in a Bank"
+author: "By Hirudika Anupama"
+date: "15 April 2025"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# --- Load Required Libraries ---
+
+```{r}
+# Load required packages
+library(simmer)
+library(ggplot2)
+library(dplyr)
+
+
+```
+
+# --- Model Development ---
+
+
+```{r}
+
+# 1.1 Define all parameters
+sim_duration <- 480       # 8 hours in minutes
+arrival_rate <- 10/60     # 10 customers/hour -> customers/minute
+service_rate <- 1/5       # 1 customer/5 minutes -> customers/minute
+current_counters <- 2
+proposed_counters <- 3
+wait_threshold <- 15      # minutes
+
+
+```
+
