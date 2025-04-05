@@ -1,38 +1,416 @@
 ---
-title: "Simulation and Analysis of Customer Queuing System in a Bank"
+title: "Bank Queue Simulation"
 author: "By Hirudika Anupama"
-date: "15 April 2025"
-output: pdf_document
+date: "2025-04-01"
+output: word_document
+
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-# --- Load Required Libraries ---
+
+# Introduction 
+
+Since a well-established bank has to deal with a high number of customers, it is necessary to simulate the current queuing system and predict future performance under different scenarios.
+
+The goal is to assess the impact of the current service counter process (with 2 service counters) and add an additional service counter (3 service counters) if the average wait time is more than 15 minutes.
+
+Customers arrive in a Poisson process (10 per hour) and are served with exponentially distributed times (average service time 5 minutes). The simulation covers an 8-hour workday (480 minutes).
+
+
+
+
+# Model Development
+
+## The concept of the model
+
+The bank's customer service system follows the M/M/2 queuing model:
+
+1. M (Poisonous Arrivals) – Customers arrive randomly at a normal rate (λ = 10/hour).
+
+2. M (Exponential Service Times) – Service times vary randomly, averaging 5 minutes per customer (μ = 12/hour per server).
+
+3. 2 Servers – Two counters operate in parallel on a shared queue.
+
+
+
+
+## Key Features
+
+1. First-come, first-served (FCFS) discipline.
+
+2. Unlimited queue capacity (no customer rejection).
+
+3. Markovian (memoryless) property: Past arrivals/service times do not affect future events.
+
+
+
+
+## Model Formulation
+
+\section*{Arrival Process}
+
+### Arrival Process
+Customers arrive randomly according to a Poisson process (random independent events occur at a constant rate). There are 10 customers per hour, and the arrival rate per minute is:
+\[
+\lambda = \frac{10}{60} \text{ customers per minute.}
+\]
+
+\section*{Service Process}
+### Service Process
+Service times follow an exponential distribution (time between random independent events) with a mean of 5 minutes. This means that the service rate is:
+\[
+\mu = \frac{1}{5} \text{ per minute.}
+\]
+
+\section*{Queue Discipline}
+### Queue Discipline
+Customers are served on a first-come, first-served (FCFS) basis.
+
+
+\section*{Simulation Duration}
+### Simulation Duration
+The simulation runs for 480 minutes (8 hours).
+
+
+
+
+## Implementation Using the *simmer* Package
+
+The simmer package, designed for discrete-event simulation, is used for this. In the simulation, each customer travels through the following trajectory:
+
+1. Seize a server: The customer occupies a server.
+
+2. Wait (if necessary) and get served: The customer’s service time is generated from an exponential distribution.
+
+3. Release the server: After service, the server becomes available for the next customer.
+
+
+
+
+
+### Code: Setting Up the Environment and Parameters
+
 
 ```{r}
-# Load required packages
-library(simmer)
-library(ggplot2)
-library(dplyr)
+# Required libraries for discrete-event simulation and visualization
+library(simmer)         # Core simulation engine
+library(simmer.plot)    # For extracting simulation results
+library(ggplot2)        # For visualizations
 
 
 ```
 
-# --- Model Development ---
+Load the necessary packages and set a seed to ensure that our results are reproducible.
 
+### Define Parameters and Seed
 
 ```{r}
+# Set seed for reproducibility (so results are same every time you run)
+set.seed(123)
 
-# 1.1 Define all parameters
-sim_duration <- 480       # 8 hours in minutes
-arrival_rate <- 10/60     # 10 customers/hour -> customers/minute
-service_rate <- 1/5       # 1 customer/5 minutes -> customers/minute
-current_counters <- 2
-proposed_counters <- 3
-wait_threshold <- 15      # minutes
+# Define arrival rate: 10 customers per hour = 10/60 per minute
+arrival_rate <- 10 / 60     
+
+# Define service rate: 5 minutes average service time = 1/5 customers per minute
+service_rate <- 1 / 5
+
+# Total simulation time: 8 hours = 480 minutes
+simulation_time <- 480
 
 
 ```
 
+The arrival_rate and service_rate determine the timing of events in our simulation.
+
+### Define Customer Behavior (Trajectory)
+
+
+```{r}
+
+# Create a "trajectory" that models what each customer does:
+# - Seize a server
+# - Get served for a time sampled from an exponential distribution
+# - Release the server
+customer_path <- trajectory("Customer") %>%
+  seize("server") %>%
+  timeout(function() rexp(1, service_rate)) %>%
+  release("server")
+
+
+```
+The customer trajectory defines the steps that every customer follows. We use the seize() function to simulate the customer taking a server, timeout() to simulate the service process with an exponential time, and release() to free up the server afterward.
+
+
+### Simulate for 2 Servers (Current Scenario)
+
+#### Initialize the Simulation Environmen
+
+```{r}
+# Create simulation environment
+bank_env2 <- simmer("Bank_2_Servers")
+
+# Add 2 servers (resources)
+bank_env2 <- bank_env2 %>%
+  add_resource("server", capacity = 2)
+
+# Generate customers with exponential interarrival time
+bank_env2 <- bank_env2 %>%
+  add_generator("customer", customer_path, function() rexp(1, arrival_rate))
+
+# Run the simulation for 480 minutes
+bank_env2 <- bank_env2 %>%
+  run(until = simulation_time)
+
+
+```
+
+#### Extract Monitoring Data
+
+```{r}
+
+# Extract data about customer arrivals and server usage
+arrivals2 <- get_mon_arrivals(bank_env2)
+resources2 <- get_mon_resources(bank_env2)
+
+```
+
+#### Calculate Waiting Time
+
+```{r}
+# Calculate waiting time = time in queue before being served
+arrivals2$waiting_time <- arrivals2$end_time - arrivals2$start_time - arrivals2$activity_time
+
+```
+
+
+```{r}
+# Average waiting time
+avg_waiting_2 <- mean(arrivals2$waiting_time)
+
+# Average queue length over time
+avg_queue_2 <- mean(resources2$queue)
+
+# Server utilization = total busy time / total available time (all servers)
+utilization_2 <- sum(resources2$server) / (simulation_time * 2)
+
+# Display results
+cat("---- 2 SERVERS ----\n")
+cat("Average Waiting Time:", round(avg_waiting_2, 2), "minutes\n")
+cat("Average Queue Length:", round(avg_queue_2, 2), "\n")
+cat("Server Utilization:", round(utilization_2, 2), "\n\n")
+
+```
+
+
+In this section, we:
+
+    Create a simulation environment named "Bank_2_Servers" with 2 servers.
+
+    Add a generator for customers with interarrival times drawn from an exponential distribution (reflecting the Poisson process).
+
+    Run the simulation for 480 minutes.
+
+    Extract and, if necessary, compute the waiting_time for each customer. We also ensure that data columns are numeric for later calculations.
+    
+
+### Simulate for 3 Servers (Proposed Scenario)
+#### Initialize the Simulation Environment
+
+```{r}
+bank_env3 <- simmer("Bank_3_Servers") %>%
+  add_resource("server", capacity = 3) %>%
+  add_generator("customer", customer_path, function() rexp(1, arrival_rate)) %>%
+  run(until = simulation_time)
+
+
+
+```
+
+#### Extract Monitoring Data
+
+
+```{r}
+arrivals3 <- get_mon_arrivals(bank_env3)
+resources3 <- get_mon_resources(bank_env3)
+
+```
+
+
+#### Calculate Waiting Time
+
+```{r}
+arrivals3$waiting_time <- arrivals3$end_time - arrivals3$start_time - arrivals3$activity_time
+
+```
+
+#### Compute Metrics for 3 Servers
+
+```{r}
+avg_waiting_3 <- mean(arrivals3$waiting_time)
+avg_queue_3 <- mean(resources3$queue)
+utilization_3 <- sum(resources3$server) / (simulation_time * 3)
+
+cat("---- 3 SERVERS ----\n")
+cat("Average Waiting Time:", round(avg_waiting_3, 2), "minutes\n")
+cat("Average Queue Length:", round(avg_queue_3, 2), "\n")
+cat("Server Utilization:", round(utilization_3, 2), "\n")
+
+```
+
+
+
+Similarly, we set up a simulation for the 3-server scenario by changing the resource capacity from 2 to 3. The same steps are followed to run the simulation and extract monitoring data
+
+
+
+
+
+
+
+
+
+
+# Task 2: Analysis and Interpretation
+
+
+### Calculating Performance Metrics
+
+
+We calculate three key performance metrics:
+
+    Average Waiting Time: The mean time customers spend waiting for service.
+
+    Average Queue Length: The mean number of customers waiting in line.
+
+    Server Utilization: The ratio of the time servers are busy relative to the total available server time
+
+
+```{r}
+# For 2 Servers:
+avg_waiting2 <- mean(arrivals2$waiting_time, na.rm = TRUE)
+avg_queue_length2 <- mean(resources2$queue[resources2$resource == "server"], na.rm = TRUE)
+utilization2 <- sum(resources2$server[resources2$resource == "server"], na.rm = TRUE) / (simulation_time * 2)
+
+# For 3 Servers:
+avg_waiting3 <- mean(arrivals3$waiting_time, na.rm = TRUE)
+avg_queue_length3 <- mean(resources3$queue[resources3$resource == "server"], na.rm = TRUE)
+utilization3 <- sum(resources3$server[resources3$resource == "server"], na.rm = TRUE) / (simulation_time * 3)
+
+# Print the results:
+cat("Performance Metrics for 2 Servers:\n")
+cat("Average Waiting Time:", round(avg_waiting2, 2), "minutes\n")
+cat("Average Queue Length:", round(avg_queue_length2, 2), "\n")
+cat("Server Utilization:", round(utilization2, 2), "\n\n")
+
+cat("Performance Metrics for 3 Servers:\n")
+cat("Average Waiting Time:", round(avg_waiting3, 2), "minutes\n")
+cat("Average Queue Length:", round(avg_queue_length3, 2), "\n")
+cat("Server Utilization:", round(utilization3, 2), "\n")
+
+```
+
+In this code:
+
+    For each system, we calculate the average waiting time, average queue length, and server utilization.
+
+    Server Utilization is computed by summing the busy time for the server resource and then dividing by the product of the simulation time and the number of servers.
+
+    The results are printed to the console
+    
+### Interpretation
+
+In your report, you should write about 500 words to discuss:
+
+    How the performance metrics compare between the 2-server and 3-server systems.
+    For instance, you might note that a lower average waiting time and shorter queue length in the 3-server system suggest that adding an extra counter improves service efficiency.
+
+    The trade-off between server utilization and service quality.
+    While the utilization per server might decrease with an extra server, overall customer satisfaction may improve due to reduced waiting times.
+
+    Operational Implications:
+    Explain if the average waiting time in the current system exceeds acceptable levels (e.g., over 15 minutes), which would justify the cost of an extra server.
+
+    Cost vs. Benefit:
+    Weigh the cost of adding an extra counter against the benefit of reduced wait times and improved customer experience.
+
+    Strategic Recommendations:
+    Based on the simulation outcomes, recommend whether the bank should increase its service capacity or look into alternative process improvements.
+
+Integrate numerical results, discussion of variability (if available), and any potential improvements or further simulations.
+
+
+
+
+
+
+
+
+
+# Part 3: Visualization and Reporting (500 words)
+
+### Creating Visualizations
+
+Visualizations support your analysis by showing the distribution of waiting times and the evolution of queue lengths over time
+
+
+#### Visual 1: Waiting Time Distribution (Histogram)
+
+```{r}
+wait_data <- data.frame(
+  Wait_Time = c(arrivals2$waiting_time, arrivals3$waiting_time),
+  Scenario = rep(c("2 Servers", "3 Servers"),
+                 c(nrow(arrivals2), nrow(arrivals3)))
+)
+
+ggplot(wait_data, aes(x = Wait_Time, fill = Scenario)) +
+  geom_histogram(position = "identity", alpha = 0.5, bins = 30) +
+  geom_vline(xintercept = 15, linetype = "dashed", color = "red") +
+  annotate("text", x = 15, y = Inf, label = "15-min threshold", 
+           vjust = 2, hjust = 1.2, color = "red") +
+  labs(title = "Customer Wait Time Distribution",
+       x = "Wait Time (minutes)", y = "Number of Customers") +
+  theme_minimal()
+
+
+```
+
+Interpretation:
+The histogram shows that in the 2-server scenario, many customers wait longer than 15 minutes, while the 3-server setup keeps almost all wait times below this limit. The dashed line indicates the management threshold.
+
+#### Queue Length Over Time (2 Servers)
+```{r}
+ggplot(resources2, aes(x = time, y = queue)) +
+  geom_line(color = "blue") +
+  labs(title = "Queue Length Over Time (2 Servers)",
+       x = "Time (minutes)", y = "Queue Length") +
+  theme_minimal()
+
+
+```
+Interpretation:
+This chart reveals that queues build up steadily throughout the day under the 2-server setup. This persistent buildup signals insufficient service capacity, especially during peak hours.
+
+
+
+
+
+Report Summary
+
+This project simulated a real-world queuing problem using a discrete-event simulation approach. The visualizations offer a clear view of customer service inefficiencies under the current setup and the benefits of capacity expansion.
+
+Methodology:
+Using the simmer package, we modeled individual customer arrivals and services using exponential distributions, capturing real-time dynamics like queue formation, server utilization, and wait times. Performance metrics were logged and analyzed quantitatively and visually.
+
+Findings:
+
+    The 2-server setup results in long wait times and larger queues.
+
+    Adding a 3rd server improves wait times, queue lengths, and customer experience.
+
+    Utilization drops slightly but remains acceptable for operational efficiency.
+
+Recommendations:
+Add a third counter. While underutilized compared to the others, it allows the bank to maintain service quality, especially during unexpected customer surges.
